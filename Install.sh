@@ -1,85 +1,75 @@
 #!/bin/bash
 
-# Mise à jour des paquets et installation des prérequis
-echo "Mise à jour des paquets et installation des prérequis..."
+set -e
+
+echo "Mise à jour du système..."
 sudo apt-get update -y
 sudo apt-get upgrade -y
-sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
 
-# Installation de Terraform
-echo "Installation de Terraform..."
-curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
-sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
-sudo apt-get update -y
-sudo apt-get install -y terraform
-
-# Installation de AWS CLI
-echo "Installation de AWS CLI..."
-sudo apt-get install -y awscli
-
-# Installation de Docker
-echo "Installation de Docker..."
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
-sudo apt-get update -y
-sudo apt-get install -y docker-ce
-
-# Ajout de l'utilisateur actuel au groupe Docker
-sudo usermod -aG docker ${USER}
-
-# Installation de Minikube
-echo "Installation de Minikube..."
-curl -Lo minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-sudo install minikube /usr/local/bin/
-
-# Installation de kubectl
-echo "Installation de kubectl..."
-curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-sudo install kubectl /usr/local/bin/
-
-# Installation de Python, pip, et virtualenv
-echo "Installation de Python, pip, et virtualenv..."
-sudo apt-get install -y python3 python3-pip python3-venv
-
-# Installation de Java
-echo "Installation de Java..."
-sudo apt-get install -y default-jdk
-
-# Configuration de JAVA_HOME
-echo "Configuration de JAVA_HOME..."
-JAVA_HOME=$(readlink -f /usr/bin/java | sed "s:/bin/java::")
-echo "export JAVA_HOME=$JAVA_HOME" >> ~/.bashrc
-source ~/.bashrc
-
-# Installation de Git
 echo "Installation de Git..."
 sudo apt-get install -y git
 
-# Installation de Prometheus
-echo "Installation de Prometheus..."
-sudo useradd --no-create-home --shell /bin/false prometheus
-wget https://github.com/prometheus/prometheus/releases/download/v2.29.1/prometheus-2.29.1.linux-amd64.tar.gz
-tar xvf prometheus-2.29.1.linux-amd64.tar.gz
-sudo cp prometheus-2.29.1.linux-amd64/prometheus /usr/local/bin/
-sudo cp prometheus-2.29.1.linux-amd64/promtool /usr/local/bin/
-sudo mkdir /etc/prometheus
-sudo cp -r prometheus-2.29.1.linux-amd64/consoles /etc/prometheus
-sudo cp -r prometheus-2.29.1.linux-amd64/console_libraries /etc/prometheus
-sudo cp prometheus-2.29.1.linux-amd64/prometheus.yml /etc/prometheus/prometheus.yml
+echo "Installation de Docker..."
+sudo apt-get install -y docker.io
+sudo systemctl start docker
+sudo systemctl enable docker
 
-# Installation de Grafana
-echo "Installation de Grafana..."
-wget -q -O - https://packages.grafana.com/gpg.key | sudo apt-key add -
-sudo add-apt-repository "deb https://packages.grafana.com/oss/deb stable main"
-sudo apt-get update -y
-sudo apt-get install -y grafana
-sudo systemctl start grafana-server
-sudo systemctl enable grafana-server
+echo "Installation de Terraform..."
+wget https://releases.hashicorp.com/terraform/1.1.3/terraform_1.1.3_linux_amd64.zip
+unzip terraform_1.1.3_linux_amd64.zip
+sudo mv terraform /usr/local/bin/
+rm terraform_1.1.3_linux_amd64.zip
 
-echo "Installation terminée ! Veuillez redémarrer votre session ou exécuter 'newgrp docker' pour appliquer les changements de groupe Docker."
+echo "Installation d'Ansible..."
+sudo apt-get install -y software-properties-common
+sudo apt-add-repository --yes --update ppa:ansible/ansible
+sudo apt-get install -y ansible
 
-# Nettoyage des fichiers téléchargés
-rm -f minikube kubectl prometheus-2.29.1.linux-amd64.tar.gz
+echo "Installation de l'AWS CLI..."
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+rm -rf awscliv2.zip aws
 
-# Instructions finales
-echo "Tous les outils nécessaires ont été installés. Assurez-vous de configurer AWS CLI avec 'aws configure'."
+echo "Ajout du dépôt Kubernetes..."
+sudo apt-get update && sudo apt-get install -y apt-transport-https curl
+curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+cat <<EOF | sudo tee /etc/apt/sources.list.d/kubernetes.list
+deb https://apt.kubernetes.io/ kubernetes-xenial main
+EOF
+
+echo "Installation de kubelet, kubeadm et kubectl..."
+sudo apt-get update
+sudo apt-get install -y kubelet kubeadm kubectl
+sudo apt-mark hold kubelet kubeadm kubectl
+
+echo "Désactivation du swap..."
+sudo swapoff -a
+sudo sed -i '/ swap / s/^/#/' /etc/fstab
+
+echo "Initialisation du cluster Kubernetes..."
+sudo kubeadm init --pod-network-cidr=10.244.0.0/16
+
+echo "Configuration de kubectl pour l'utilisateur actuel..."
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+echo "Déploiement du réseau Calico..."
+kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
+
+echo "Installation de Helm..."
+curl https://baltocdn.com/helm/signing.asc | sudo apt-key add -
+sudo apt-get install apt-transport-https --yes
+echo "deb https://baltocdn.com/helm/stable/debian/ all main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
+sudo apt-get update
+sudo apt-get install helm
+
+echo "Installation de Prometheus et Grafana avec Helm..."
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo update
+helm install prometheus prometheus-community/prometheus
+helm install grafana grafana/grafana
+
+echo "Installation terminée !"
