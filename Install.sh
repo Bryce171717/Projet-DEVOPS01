@@ -1,75 +1,107 @@
 #!/bin/bash
 
-set -e
+# Mettre à jour le système
+sudo apt update && sudo apt upgrade -y
 
-echo "Mise à jour du système..."
-sudo apt-get update -y
-sudo apt-get upgrade -y
+# Installer les outils de développement
+sudo apt install -y git curl wget build-essential
 
-echo "Installation de Git..."
-sudo apt-get install -y git
+# Vérifier l'installation des outils de développement
+if ! command -v git &> /dev/null || ! command -v curl &> /dev/null || ! command -v wget &> /dev/null; then
+    echo "Erreur lors de l'installation des outils de développement."
+    exit 1
+fi
 
-echo "Installation de Docker..."
-sudo apt-get install -y docker.io
-sudo systemctl start docker
+# Installer Docker
+sudo apt install -y apt-transport-https ca-certificates software-properties-common
+curl -fsSL https://download.docker.com/linux/debian/gpg | sudo apt-key add -
+sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable"
+sudo apt update
+sudo apt install -y docker-ce
 sudo systemctl enable docker
+sudo systemctl start docker
+sudo usermod -aG docker $USER
 
-echo "Installation de Terraform..."
-wget https://releases.hashicorp.com/terraform/1.1.3/terraform_1.1.3_linux_amd64.zip
-unzip terraform_1.1.3_linux_amd64.zip
-sudo mv terraform /usr/local/bin/
-rm terraform_1.1.3_linux_amd64.zip
+# Vérifier l'installation de Docker
+if ! command -v docker &> /dev/null; then
+    echo "Erreur lors de l'installation de Docker."
+    exit 1
+fi
 
-echo "Installation d'Ansible..."
-sudo apt-get install -y software-properties-common
-sudo apt-add-repository --yes --update ppa:ansible/ansible
-sudo apt-get install -y ansible
+# Installer Docker Compose
+sudo curl -L "https://github.com/docker/compose/releases/download/$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep -oP '(?<=tag_name\": \"v)[^"]*')" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
 
-echo "Installation de l'AWS CLI..."
+# Vérifier l'installation de Docker Compose
+if ! command -v docker-compose &> /dev/null; then
+    echo "Erreur lors de l'installation de Docker Compose."
+    exit 1
+fi
+
+# Installer Terraform
+sudo apt install -y unzip
+wget https://releases.hashicorp.com/terraform/1.3.7/terraform_1.3.7_linux_amd64.zip
+sudo unzip terraform_1.3.7_linux_amd64.zip -d /usr/local/bin/
+rm terraform_1.3.7_linux_amd64.zip
+
+# Vérifier l'installation de Terraform
+if ! command -v terraform &> /dev/null; then
+    echo "Erreur lors de l'installation de Terraform."
+    exit 1
+fi
+
+# Installer Ansible
+sudo apt update
+sudo apt install -y ansible
+
+# Vérifier l'installation d'Ansible
+if ! command -v ansible &> /dev/null; then
+    echo "Erreur lors de l'installation d'Ansible."
+    exit 1
+fi
+
+# Installer Python et pip
+sudo apt install -y python3 python3-pip python3-venv
+
+# Créer un environnement virtuel pour installer les paquets Python
+python3 -m venv ~/myenv
+source ~/myenv/bin/activate
+
+# Installer les dépendances Python pour le développement
+pip install flask django requests
+
+# Vérifier l'installation des paquets Python
+if ! python -c "import flask, django, requests" &> /dev/null; then
+    echo "Erreur lors de l'installation des paquets Python."
+    exit 1
+fi
+
+# Installer Kubernetes CLI (kubectl)
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+# Vérifier l'installation de kubectl
+if ! command -v kubectl &> /dev/null; then
+    echo "Erreur lors de l'installation de kubectl."
+    exit 1
+fi
+
+# Installer AWS CLI
 curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
 unzip awscliv2.zip
 sudo ./aws/install
 rm -rf awscliv2.zip aws
 
-echo "Ajout du dépôt Kubernetes..."
-sudo apt-get update && sudo apt-get install -y apt-transport-https curl
-curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
-cat <<EOF | sudo tee /etc/apt/sources.list.d/kubernetes.list
-deb https://apt.kubernetes.io/ kubernetes-xenial main
-EOF
+# Vérifier l'installation de l'AWS CLI
+if ! command -v aws &> /dev/null; then
+    echo "Erreur lors de l'installation de l'AWS CLI."
+    exit 1
+fi
 
-echo "Installation de kubelet, kubeadm et kubectl..."
-sudo apt-get update
-sudo apt-get install -y kubelet kubeadm kubectl
-sudo apt-mark hold kubelet kubeadm kubectl
+# Configuration de l'utilisateur pour AWS CLI
+aws configure
 
-echo "Désactivation du swap..."
-sudo swapoff -a
-sudo sed -i '/ swap / s/^/#/' /etc/fstab
-
-echo "Initialisation du cluster Kubernetes..."
-sudo kubeadm init --pod-network-cidr=10.244.0.0/16
-
-echo "Configuration de kubectl pour l'utilisateur actuel..."
-mkdir -p $HOME/.kube
-sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
-sudo chown $(id -u):$(id -g) $HOME/.kube/config
-
-echo "Déploiement du réseau Calico..."
-kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
-
-echo "Installation de Helm..."
-curl https://baltocdn.com/helm/signing.asc | sudo apt-key add -
-sudo apt-get install apt-transport-https --yes
-echo "deb https://baltocdn.com/helm/stable/debian/ all main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
-sudo apt-get update
-sudo apt-get install helm
-
-echo "Installation de Prometheus et Grafana avec Helm..."
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm repo add grafana https://grafana.github.io/helm-charts
-helm repo update
-helm install prometheus prometheus-community/prometheus
-helm install grafana grafana/grafana
-
-echo "Installation terminée !"
+echo "Installation des prérequis terminée. Veuillez redémarrer la machine pour appliquer les changements de groupe Docker."
+sleep 10
+# Redémarrer la machine
+sudo reboot
