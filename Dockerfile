@@ -6,9 +6,10 @@ RUN pip install pyspark
 
 # Ajout du code de l'application dans le conteneur
 COPY Helloworld.py /app/Helloworld.py
+COPY test_helloworld.py /app/test_helloworld.py
 
 # Définir le répertoire de travail
 WORKDIR /app
 
-# Commande pour exécuter l'application
-CMD ["python", "Helloworld.py"]
+# Commande pour exécuter les tests puis l'application
+CMD ["bash", "-c", "pytest test_helloworld.py && python Helloworld.py"]
