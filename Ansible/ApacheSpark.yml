@@ -1,5 +1,5 @@
 # install_spark.yml
-- hosts: spark
+- hosts: all
   become: yes
   tasks:
     - name: Update apt repo and cache
