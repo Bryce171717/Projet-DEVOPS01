@@ -3,6 +3,10 @@ provider "aws" {
   region = "eu-west-3"
 }
 
+provider "null" {
+ 
+}
+
 # variables.tf
 variable "instance_type" {
   default = "t2.medium"
@@ -12,18 +16,27 @@ variable "cluster_size" {
   default = 3
 }
 
+variable "key_name" {
+  description = "Name of the SSH key pair"
+  default     = "SparkMongoDB"  
+}
+
 # spark_cluster.tf
 resource "aws_instance" "spark_master" {
   count         = 1
   ami           = "ami-0fda19674ff597992"
   instance_type = var.instance_type
-  key_name      = "my-key"
+  key_name      = var.key_name
   subnet_id     = aws_subnet.subnet.id
   security_groups = [aws_security_group.spark_sg.id]
 
   tags = {
     Name = "Spark Master"
   }
+}
+
+resource "null_resource" "provision_spark_master" {
+  depends_on = [aws_instance.spark_master]
 
   provisioner "remote-exec" {
     inline = [
@@ -35,13 +48,13 @@ resource "aws_instance" "spark_master" {
     connection {
       type        = "ssh"
       user        = "admin01"
-      private_key = file("~/.ssh/id_rsa")
-      host        = self.public_ip
+      private_key = file("/home/admin01/Projet01/SparkMongoDB.pem")
+      host        = aws_instance.spark_master[0].public_ip
     }
   }
 
   provisioner "local-exec" {
-    command = "ansible-playbook -i '${self.public_ip},' -u admin01 --private-key ~/.ssh/id_rsa install_spark.yml"
+    command = "ansible-playbook -i '${aws_instance.spark_master[0].public_ip},' -u admin01 --private-key /home/admin01/Projet01/SparkMongoDB.pem install_spark.yml"
   }
 }
 
@@ -49,13 +62,18 @@ resource "aws_instance" "spark_workers" {
   count         = var.cluster_size - 1
   ami           = "ami-0fda19674ff597992"
   instance_type = var.instance_type
-  key_name      = "my-key"
+  key_name      = var.key_name
   subnet_id     = aws_subnet.subnet.id
   security_groups = [aws_security_group.spark_sg.id]
 
   tags = {
     Name = "Spark Worker ${count.index + 1}"
   }
+}
+
+resource "null_resource" "provision_spark_workers" {
+  count = var.cluster_size - 1
+  depends_on = [aws_instance.spark_workers]
 
   provisioner "remote-exec" {
     inline = [
@@ -67,13 +85,13 @@ resource "aws_instance" "spark_workers" {
     connection {
       type        = "ssh"
       user        = "admin01"
-      private_key = file("~/.ssh/id_rsa")
-      host        = self.public_ip
+      private_key = file("/home/admin01/Projet01/SparkMongoDB.pem")
+      host        = aws_instance.spark_workers[count.index].public_ip
     }
   }
 
   provisioner "local-exec" {
-    command = "ansible-playbook -i '${self.public_ip},' -u admin01 --private-key ~/.ssh/id_rsa install_spark.yml"
+    command = "ansible-playbook -i '${aws_instance.spark_workers[count.index].public_ip},' -u admin01 --private-key /home/admin01/Projet01/SparkMongoDB.pem install_spark.yml"
   }
 }
 
