@@ -34,12 +34,12 @@ resource "aws_instance" "spark_master" {
       type        = "ssh"
       user        = "admin01"
       private_key = file("~/.ssh/id_rsa")
-      host        = self.public_ip
+      host        = aws_instance.spark_master[0].public_ip
     }
   }
 
   provisioner "local-exec" {
-    command = "ansible-playbook -i '${self.public_ip},' -u admin01 --private-key ~/.ssh/id_rsa install_spark.yml"
+    command = "ansible-playbook -i '${aws_instance.spark_master[0].public_ip},' -u admin01 --private-key ~/.ssh/id_rsa install_spark.yml"
   }
 }
 
@@ -64,12 +64,12 @@ resource "aws_instance" "spark_workers" {
       type        = "ssh"
       user        = "admin01"
       private_key = file("~/.ssh/id_rsa")
-      host        = self.public_ip
+      host        = aws_instance.spark_workers[count.index].public_ip
     }
   }
 
   provisioner "local-exec" {
-    command = "ansible-playbook -i '${self.public_ip},' -u admin01 --private-key ~/.ssh/id_rsa install_spark.yml"
+    command = "ansible-playbook -i '${aws_instance.spark_workers[count.index].public_ip},' -u admin01 --private-key ~/.ssh/id_rsa install_spark.yml"
   }
 }
 
@@ -79,44 +79,4 @@ resource "aws_vpc" "main" {
 }
 
 resource "aws_subnet" "subnet" {
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.1.0/24"
-  availability_zone = "eu-west-3a"
-}
-
-resource "aws_security_group" "spark_sg" {
-  vpc_id = aws_vpc.main.id
-
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 8080
-    to_port     = 8081
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-# attach the security group to instances
-resource "aws_network_interface_sg_attachment" "spark_master_sg" {
-  security_group_id    = aws_security_group.spark_sg.id
-  network_interface_id = aws_instance.spark_master.primary_network_interface_id
-}
-
-resource "aws_network_interface_sg_attachment" "spark_worker_sg" {
-  count                = var.cluster_size - 1
-  security_group_id    = aws_security_group.spark_sg.id
-  network_interface_id = aws_instance.spark_workers[count.index].primary_network_interface_id
-}
+  vpc_id            = aws_vpc
