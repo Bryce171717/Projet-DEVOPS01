@@ -1,101 +1,122 @@
+# provider.tf
 provider "aws" {
   region = "eu-west-3"
 }
 
-resource "aws_emr_cluster" "spark_cluster" {
-  name          = "SparkCluster"
-  release_label = "emr-7.1.0"
-  applications  = ["Hadoop", "Hive", "JupyterEnterpriseGateway", "Livy", "Spark"]
-  service_role  = "arn:aws:iam::031131961798:role/service-role/AmazonEMR-ServiceRole-20240505T140225"
-  log_uri       = "s3://aws-logs-031131961798-eu-west-3/elasticmapreduce"
+# variables.tf
+variable "instance_type" {
+  default = "t2.medium"
+}
+
+variable "cluster_size" {
+  default = 3
+}
+
+# spark_cluster.tf
+resource "aws_instance" "spark_master" {
+  count         = 1
+  ami           = "ami-0fda19674ff597992"
+  instance_type = var.instance_type
+  key_name      = "my-key"
+
   tags = {
-    "for-use-with-amazon-emr-managed-policies" = "true"
+    Name = "Spark Master"
   }
 
-  ec2_attributes {
-    instance_profile          = "EmrEc2S3Full"
-    emr_managed_master_security_group = "sg-01ceb80944ffa01d6"
-    emr_managed_slave_security_group  = "sg-0852ccf141b26f385"
-    subnet_id                 = "subnet-00508a1e4ac0faf28"
-    additional_master_security_groups = []
-    additional_slave_security_groups  = []
-  }
+  provisioner "remote-exec" {
+    inline = [
+      "sudo apt-get update -y",
+      "sudo apt-get install -y python3 python3-pip",
+      "pip3 install ansible"
+    ]
 
-  instance_group {
-    instance_type  = "m5.xlarge"
-    instance_count = 1
-    instance_role  = "TASK"
-    name           = "Tâche - 1"
-
-    ebs_config {
-      size                = 32
-      type                = "gp2"
-      volumes_per_instance = 2
+    connection {
+      type        = "ssh"
+      user        = "admin01"
+      private_key = file("~/.ssh/id_rsa")
+      host        = self.public_ip
     }
   }
 
-  instance_group {
-    instance_type  = "m5.xlarge"
-    instance_count = 1
-    instance_role  = "MASTER"
-    name           = "Primaire"
-
-    ebs_config {
-      size                = 32
-      type                = "gp2"
-      volumes_per_instance = 2
-    }
-  }
-
-  instance_group {
-    instance_type  = "m5.xlarge"
-    instance_count = 1
-    instance_role  = "CORE"
-    name           = "Unité principale"
-
-    ebs_config {
-      size                = 32
-      type                = "gp2"
-      volumes_per_instance = 2
-    }
-  }
-
-  scale_down_behavior = "TERMINATE_AT_TASK_COMPLETION"
-
-  bootstrap_action {
-    name = "Install necessary libraries"
-    path = "s3://s3-spark-mongodb/bootstrap.sh"
-  }
-
-  configurations = <<EOF
-[
-  {
-    "Classification": "spark-defaults",
-    "Properties": {
-      "spark.mongodb.input.uri": "mongodb://<username>:<password>@<mongodb_server>:27017/<database>.<collection>?authSource=<authSource>",
-      "spark.mongodb.output.uri": "mongodb://<username>:<password>@<mongodb_server>:27017/<database>.<collection>?authSource=<authSource>"
-    }
-  }
-]
-EOF
-
-  dynamic "step" {
-    for_each = var.steps
-    content {
-      action_on_failure = lookup(step.value, "action_on_failure", "TERMINATE_CLUSTER")
-      hadoop_jar_step {
-        jar         = lookup(step.value, "jar")
-        args        = lookup(step.value, "args", [])
-        main_class  = lookup(step.value, "main_class", null)
-        properties  = lookup(step.value, "properties", {})
-      }
-      name = step.value.name
-    }
+  provisioner "local-exec" {
+    command = "ansible-playbook -i '${self.public_ip},' -u admin01 --private-key ~/.ssh/id_rsa install_spark.yml"
   }
 }
 
-variable "steps" {
-  description = "List of steps to run on the cluster"
-  type        = list(map(string))
-  default     = []
+resource "aws_instance" "spark_workers" {
+  count         = var.cluster_size - 1
+  ami           = "ami-0fda19674ff597992"
+  instance_type = var.instance_type
+  key_name      = "my-key"
+
+  tags = {
+    Name = "Spark Worker ${count.index + 1}"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "sudo apt-get update -y",
+      "sudo apt-get install -y python3 python3-pip",
+      "pip3 install ansible"
+    ]
+
+    connection {
+      type        = "ssh"
+      user        = "admin01"
+      private_key = file("~/.ssh/id_rsa")
+      host        = self.public_ip
+    }
+  }
+
+  provisioner "local-exec" {
+    command = "ansible-playbook -i '${self.public_ip},' -u admin01 --private-key ~/.ssh/id_rsa install_spark.yml"
+  }
+}
+
+# network.tf
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+
+resource "aws_subnet" "subnet" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.1.0/24"
+  availability_zone = "eu-west-3a"
+}
+
+resource "aws_security_group" "spark_sg" {
+  vpc_id = aws_vpc.main.id
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 8080
+    to_port     = 8081
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# attach the security group to instances
+resource "aws_network_interface_sg_attachment" "spark_master_sg" {
+  security_group_id    = aws_security_group.spark_sg.id
+  network_interface_id = aws_instance.spark_master.primary_network_interface_id
+}
+
+resource "aws_network_interface_sg_attachment" "spark_worker_sg" {
+  count                = var.cluster_size - 1
+  security_group_id    = aws_security_group.spark_sg.id
+  network_interface_id = aws_instance.spark_workers[count.index].primary_network_interface_id
 }

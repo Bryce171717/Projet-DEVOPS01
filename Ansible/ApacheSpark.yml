@@ -1,0 +1,38 @@
+# install_spark.yml
+- hosts: spark
+  become: yes
+  tasks:
+    - name: Update apt repo and cache
+      apt:
+        update_cache: yes
+
+    - name: Install Java
+      apt:
+        name: openjdk-8-jdk
+        state: present
+
+    - name: Download Spark
+      get_url:
+        url: https://archive.apache.org/dist/spark/spark-3.0.1/spark-3.0.1-bin-hadoop2.7.tgz
+        dest: /tmp/spark.tgz
+
+    - name: Extract Spark
+      unarchive:
+        src: /tmp/spark.tgz
+        dest: /opt/
+        creates: /opt/spark-3.0.1-bin-hadoop2.7
+
+    - name: Create symbolic link for Spark
+      command: ln -s /opt/spark-3.0.1-bin-hadoop2.7 /opt/spark
+
+    - name: Set SPARK_HOME environment variable
+      lineinfile:
+        path: /etc/profile
+        line: 'export SPARK_HOME=/opt/spark'
+        create: yes
+
+    - name: Set PATH environment variable
+      lineinfile:
+        path: /etc/profile
+        line: 'export PATH=$PATH:$SPARK_HOME/bin'
+        create: yes

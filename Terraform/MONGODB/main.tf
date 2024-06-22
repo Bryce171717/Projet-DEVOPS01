@@ -1,6 +1,6 @@
 # provider.tf
 provider "aws" {
-  region = "us-west-3"
+  region = "eu-west-3"
 }
 
 # variables.tf
@@ -18,6 +18,25 @@ resource "aws_instance" "mongodb" {
   tags = {
     Name = "MongoDB"
   }
+
+  provisioner "remote-exec" {
+    inline = [
+      "sudo apt-get update -y",
+      "sudo apt-get install -y python3 python3-pip",
+      "pip3 install ansible"
+    ]
+
+    connection {
+      type        = "ssh"
+      user        = "admin01"
+      private_key = file("~/.ssh/id_rsa")
+      host        = self.public_ip
+    }
+  }
+
+  provisioner "local-exec" {
+    command = "ansible-playbook -i '${self.public_ip},' -u admin01 --private-key ~/.ssh/id_rsa install_mongodb.yml"
+  }
 }
 
 # network.tf (reuse from Spark)
@@ -28,7 +47,7 @@ resource "aws_vpc" "main" {
 resource "aws_subnet" "subnet" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.1.0/24"
-  availability_zone = "us-west-2a"
+  availability_zone = "eu-west-3a"
 }
 
 resource "aws_security_group" "mongodb_sg" {
