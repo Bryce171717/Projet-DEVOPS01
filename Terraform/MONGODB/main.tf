@@ -11,7 +11,7 @@ variable "instance_type" {
 # mongodb.tf
 resource "aws_instance" "mongodb" {
   count         = 1
-  ami           = "ami-0abcdef1234567890"
+  ami           = "ami-0fda19674ff597992"
   instance_type = var.instance_type
   key_name      = "my-key"
 
