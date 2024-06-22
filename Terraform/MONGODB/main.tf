@@ -1,6 +1,6 @@
 # provider.tf
 provider "aws" {
-  region = "us-west-2"
+  region = "us-west-3"
 }
 
 # variables.tf
