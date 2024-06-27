@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest # Utilise les runners par défaut de GitHub Actions basés sur Ubuntu
+    runs-on: ubuntu-latest
 
     steps:
     - name: Checkout code
@@ -16,7 +16,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
-        python-version: 3.8
+        python-version: '3.8'
 
     - name: Install dependencies
       run: |
@@ -58,7 +58,9 @@ jobs:
         sudo mv ./kubectl /usr/local/bin/kubectl
 
     - name: Configure kubectl
-      run: echo "${{ secrets.KUBE_CONFIG }}" > $HOME/.kube/config
+      run: |
+        mkdir -p ~/.kube
+        echo "${{ secrets.KUBE_CONFIG }}" > ~/.kube/config
 
     - name: Deploy to Kubernetes
       run: kubectl apply -f spark-deployment.yaml
