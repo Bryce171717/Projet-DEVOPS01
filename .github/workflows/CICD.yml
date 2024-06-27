@@ -45,7 +45,7 @@ jobs:
 
   deploy:
     needs: build-and-test
-    runs-on: ubuntu-latest # Utilise les runners par défaut de GitHub Actions basés sur Ubuntu
+    runs-on: ubuntu-latest 
 
     steps:
     - name: Checkout code
@@ -65,7 +65,7 @@ jobs:
 
   spark-submit:
     needs: deploy
-    runs-on: ubuntu-latest # Utilise les runners par défaut de GitHub Actions basés sur Ubuntu
+    runs-on: ubuntu-latest 
 
     steps:
     - name: Checkout code
