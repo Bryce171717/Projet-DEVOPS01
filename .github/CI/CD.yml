@@ -6,7 +6,7 @@ on:
       - main
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
 
     steps:
@@ -24,8 +24,7 @@ jobs:
         pip install pytest pyspark
 
     - name: Run tests
-      run: |
-        pytest test_helloworld.py
+      run: pytest test_helloworld.py
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v1
@@ -45,22 +44,47 @@ jobs:
         tags: bryce1717/hello_pyspark:latest
 
   deploy:
-    needs: build
+    needs: build-and-test
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v2
 
-    - name: Set up kubectl
-      uses: azure/setup-kubectl@v1
-      with:
-        version: 'latest'
+    - name: Install kubectl
+      run: |
+        curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
+        chmod +x ./kubectl
+        sudo mv ./kubectl /usr/local/bin/kubectl
 
     - name: Configure kubectl
-      run: |
-        echo "${{ secrets.KUBE_CONFIG }}" > $HOME/.kube/config
+      run: echo "${{ secrets.KUBE_CONFIG }}" > $HOME/.kube/config
 
     - name: Deploy to Kubernetes
+      run: kubectl apply -f spark-deployment.yaml
+
+  spark-submit:
+    needs: deploy
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Install Spark
       run: |
-        kubectl apply -f spark-deployment.yaml
+        curl -Lo spark.tgz https://downloads.apache.org/spark/spark-3.1.2/spark-3.1.2-bin-hadoop3.2.tgz
+        tar -xzf spark.tgz
+        sudo mv spark-3.1.2-bin-hadoop3.2 /opt/spark
+        export PATH=$PATH:/opt/spark/bin
+
+    - name: Submit Spark job
+      run: |
+        /opt/spark/bin/spark-submit \
+          --master k8s://https://<kubernetes-master-url> \
+          --deploy-mode cluster \
+          --name spark-pi \
+          --class org.apache.spark.examples.SparkPi \
+          --conf spark.executor.instances=5 \
+          --conf spark.kubernetes.container.image=bryce1717/hello_pyspark:latest \
+          local:///opt/spark/examples/jars/spark-examples_2.12-3.1.2.jar
