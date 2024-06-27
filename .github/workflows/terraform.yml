@@ -1,37 +1,36 @@
-name: Terraform Deploy
+name: Terraform Deployment
 
 on:
   push:
     branches:
-      - DevopsFull 
+      - main
+
 jobs:
   terraform:
-    name: Terraform
     runs-on: ubuntu-latest
-    environment: Dev  
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v2
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.3.0  # Ou la version que vous utilisez
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v1
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-west-3  
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: eu-west-3
 
-      - name: Terraform Init
-        run: terraform init
+    - name: Terraform Init
+      run: terraform init
+      working-directory: terraform/SPARKMONGODB
 
-      - name: Terraform Plan
-        run: terraform plan
-        continue-on-error: true
+    - name: Terraform Plan
+      run: terraform plan
+      working-directory: terraform/SPARKMONGODB
 
-      - name: Terraform Apply
-        if: github.ref == 'refs/heads/main'  # Déploie uniquement sur la branche main
-        run: terraform apply -auto-approve
+    - name: Terraform Apply
+      run: terraform apply -auto-approve
+      working-directory: terraform/SPARKMONGODB
