@@ -43,14 +43,6 @@ jobs:
         push: true
         tags: bryce1717/hello_pyspark:latest
 
-  deploy:
-    needs: build-and-test
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
-
     - name: Install kubectl
       run: |
         curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
@@ -58,8 +50,7 @@ jobs:
         sudo mv ./kubectl /usr/local/bin/kubectl
 
     - name: Configure kubectl
-      run: |
-        echo "${{ secrets.KUBE_CONFIG }}" | base64 --decode > $HOME/.kube/config
+      run: echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
 
     - name: Deploy to Kubernetes
       run: kubectl apply -f spark-deployment.yaml
