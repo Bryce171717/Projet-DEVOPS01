@@ -3,20 +3,17 @@ kind: Deployment
 metadata:
   name: spark-app
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
-      app: spark-app
+      app: spark
   template:
     metadata:
       labels:
-        app: spark-app
+        app: spark
     spec:
       containers:
-      - name: spark-container
-        image: bryce1717/hello_pyspark:latest
+      - name: spark
+        image: brice171717/hello_pyspark:latest
         ports:
         - containerPort: 8080
-        env:
-        - name: SPARK_MASTER
-          value: "spark://spark-master:7077"
