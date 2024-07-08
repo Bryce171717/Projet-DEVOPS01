@@ -41,4 +41,4 @@ jobs:
         context: .
         file: ./Dockerfile
         push: true
-        tags: bryce1717/hello_pyspark:latest
+        tags: br1ce171717/hello_pyspark:latest
