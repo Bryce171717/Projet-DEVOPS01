@@ -1,3 +1,23 @@
+resource "aws_instance" "mongodb" {
+  ami           = var.mongodb_ami
+  instance_type = var.mongodb_instance_type
+  key_name      = var.key_name
+
+  vpc_security_group_ids = [var.master_security_group, var.slave_security_group]
+
+  user_data = <<-EOF
+              #!/bin/bash
+              sudo apt update
+              sudo apt install -y mongodb
+              sudo systemctl start mongodb
+              sudo systemctl enable mongodb
+              EOF
+
+  tags = {
+    Name = "MongoDB Server"
+  }
+}
+
 resource "aws_emr_cluster" "Spark_Cluster" {
   name          = var.cluster_name
   release_label = var.release_label
@@ -16,13 +36,13 @@ resource "aws_emr_cluster" "Spark_Cluster" {
   master_instance_group {
     instance_type  = "m5.xlarge"
     instance_count = 1
-    name           = "Primaire"
+    name           = "Primary"
   }
 
   core_instance_group {
     instance_type  = "m5.xlarge"
     instance_count = 2
-    name           = "Unité principale et unité de tâches"
+    name           = "Core and Task Nodes"
   }
 
   configurations_json = jsonencode([
@@ -30,8 +50,8 @@ resource "aws_emr_cluster" "Spark_Cluster" {
       Classification = "spark-defaults",
       Properties = {
         "spark.jars.packages" = "org.mongodb.spark:mongo-spark-connector_2.12:3.0.1",
-        "spark.mongodb.input.uri" = "mongodb://[admin01]:[1234]@[mongodb]:27017/[database01]",
-        "spark.mongodb.output.uri" = "mongodb://[admin01]:[1234]@[mongodb]:27017/[database01]"
+        "spark.mongodb.input.uri" = "mongodb://admin01:1234@mongodb:27017/database01",
+        "spark.mongodb.output.uri" = "mongodb://admin01:1234@mongodb:27017/database01"
       }
     }
   ])
@@ -42,22 +62,22 @@ resource "aws_emr_cluster" "Spark_Cluster" {
   }
 }
 
-resource "aws_instance" "mongodb" {
-  ami           = var.mongodb_ami
-  instance_type = var.mongodb_instance_type
-  key_name      = var.key_name
+resource "null_resource" "wait_for_resources" {
+  depends_on = [aws_instance.mongodb, aws_emr_cluster.Spark_Cluster]
 
-  vpc_security_group_ids = [var.master_security_group, var.slave_security_group]
+  provisioner "local-exec" {
+    command = "sleep 120"
+  }
+}
 
-  user_data = <<-EOF
-              #!/bin/bash
-              sudo apt update
-              sudo apt install -y mongodb
-              sudo systemctl start mongodb
-              sudo systemctl enable mongodb
-              EOF
+resource "null_resource" "provision_resources" {
+  depends_on = [null_resource.wait_for_resources]
 
-  tags = {
-    Name = "MongoDB Server"
+  provisioner "local-exec" {
+    command = "ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i '${aws_instance.mongodb.public_dns},' /home/admin01/Projet01/Projet-DEVOPS01/Projet-DEVOPS01/Ansible/Mongodb.yml --private-key /home/admin01/Projet01/SparkMongoDB.pem --user ${var.ssh_user}"
+  }
+
+  provisioner "local-exec" {
+    command = "ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i '${aws_emr_cluster.Spark_Cluster.master_public_dns},' /home/admin01/Projet01/Projet-DEVOPS01/Projet-DEVOPS01/Ansible/ApacheSpark.yml --private-key /home/admin01/Projet01/SparkMongoDB.pem --user ${var.ssh_user}"
   }
 }

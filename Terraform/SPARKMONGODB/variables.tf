@@ -68,3 +68,7 @@ variable "pem_path" {
   description = "Path to the PEM file for SSH access"
   default     = "admin01@devops03:~/Projet01/SparkMongoDB.pem"
 }
+variable "ssh_user" {
+  description = "SSH username for the instances"
+  default     = "root"
+}
