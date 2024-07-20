@@ -1,28 +1,35 @@
-# install_mongodb.yml
-- hosts: all
+---
+- name: Configuration de MongoDB
+  hosts: mongodb
   become: yes
   tasks:
-    - name: Import MongoDB public GPG key
-      apt_key:
-        url: https://www.mongodb.org/static/pgp/server-4.2.asc
-        state: present
-
-    - name: Create MongoDB list file
-      apt_repository:
-        repo: 'deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu bionic/mongodb-org/4.2 multiverse'
-        state: present
-
-    - name: Update apt repo and cache
+    - name: Installation des dépendances
       apt:
-        update_cache: yes
-
-    - name: Install MongoDB
-      apt:
-        name: mongodb-org
+        name: "{{ item }}"
         state: present
+      with_items:
+        - mongodb
+        - mongodb-server
+        - python-pymongo
 
-    - name: Start MongoDB service
+    - name: Démarrer MongoDB
       service:
-        name: mongod
+        name: mongodb
         state: started
         enabled: yes
+
+    - name: Configuration de l'utilisateur admin
+      command: mongo admin --eval "db.createUser({user:'admin01', pwd:'1234', roles:[{role:'userAdminAnyDatabase', db:'admin'}]})"
+      ignore_errors: yes
+
+    - name: Configuration du fichier mongod.conf
+      lineinfile:
+        path: /etc/mongod.conf
+        regexp: '^#?bindIp:'
+        line: 'bindIp: 0.0.0.0'
+        state: present
+
+    - name: Redémarrer MongoDB pour appliquer les changements
+      service:
+        name: mongodb
+        state: restarted

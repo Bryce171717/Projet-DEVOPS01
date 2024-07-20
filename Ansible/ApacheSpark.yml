@@ -1,38 +1,41 @@
-# install_spark.yml
-- hosts: all
+---
+- name: Configuration de Spark
+  hosts: spark
   become: yes
   tasks:
-    - name: Update apt repo and cache
-      apt:
-        update_cache: yes
-
-    - name: Install Java
+    - name: Installation des dépendances Java
       apt:
         name: openjdk-8-jdk
         state: present
 
-    - name: Download Spark
+    - name: Téléchargement de Spark
       get_url:
-        url: https://archive.apache.org/dist/spark/spark-3.0.1/spark-3.0.1-bin-hadoop2.7.tgz
-        dest: /tmp/spark.tgz
+        url: "https://downloads.apache.org/spark/spark-3.0.1/spark-3.0.1-bin-hadoop2.7.tgz"
+        dest: "/opt/spark-3.0.1-bin-hadoop2.7.tgz"
 
-    - name: Extract Spark
+    - name: Extraction de Spark
       unarchive:
-        src: /tmp/spark.tgz
-        dest: /opt/
-        creates: /opt/spark-3.0.1-bin-hadoop2.7
+        src: "/opt/spark-3.0.1-bin-hadoop2.7.tgz"
+        dest: "/opt/"
+        remote_src: yes
 
-    - name: Create symbolic link for Spark
-      command: ln -s /opt/spark-3.0.1-bin-hadoop2.7 /opt/spark
-
-    - name: Set SPARK_HOME environment variable
+    - name: Configuration des variables d'environnement pour Spark
       lineinfile:
-        path: /etc/profile
-        line: 'export SPARK_HOME=/opt/spark'
-        create: yes
+        path: /etc/profile.d/spark.sh
+        line: 'export SPARK_HOME=/opt/spark-3.0.1-bin-hadoop2.7'
+        state: present
+      notify:
+        - Reload profile
 
-    - name: Set PATH environment variable
+    - name: Configuration du fichier spark-defaults.conf
       lineinfile:
-        path: /etc/profile
-        line: 'export PATH=$PATH:$SPARK_HOME/bin'
-        create: yes
+        path: "{{ item.path }}"
+        line: "{{ item.line }}"
+      with_items:
+        - { path: '/opt/spark-3.0.1-bin-hadoop2.7/conf/spark-defaults.conf', line: 'spark.mongodb.input.uri=mongodb://admin01:1234@mongodb:27017/database01' }
+        - { path: '/opt/spark-3.0.1-bin-hadoop2.7/conf/spark-defaults.conf', line: 'spark.mongodb.output.uri=mongodb://admin01:1234@mongodb:27017/database01' }
+
+  handlers:
+    - name: Reload profile
+      command: source /etc/profile.d/spark.sh
+      become: yes
